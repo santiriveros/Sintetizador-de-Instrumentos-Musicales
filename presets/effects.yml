@@ -1,0 +1,6 @@
+tracks:
+  0:
+    - {type: delay, time_ms: 180, feedback: 0.2, mix: 0.15}
+master:
+  - {type: reverb, algo: simple, mix: 0.15}
+  - {type: limiter, ceiling_dbfs: -1.0}
