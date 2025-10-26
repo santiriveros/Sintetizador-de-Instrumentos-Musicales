@@ -52,55 +52,18 @@ ks:
 # ============================================================
 # Additive synthesis (sin cambios)
 # ============================================================
-
-additive:
-  default:
-    partials: [1, 3, 5, 7, 9]
-    amps:     [1.0, 0.6, 0.4, 0.25, 0.18]
-    adsr:
-      attack_ms: 12
-      decay_ms: 60
-      sustain: 0.6
-      release_ms: 120
-
-
-# ============================================================
-# ADSR synthesis (sin cambios)
-# ============================================================
-
-adsr:
-  default:
-    waveform: additive
-    partials: [1, 2, 3, 4]
-    amps:     [1.0, 0.6, 0.3, 0.15]
-    adsr:
-      attack_ms: 2
-      decay_ms: 900
-      sustain: 0.0
-      release_ms: 200
-
-  organ:
-    waveform: square
-    adsr:
-      attack_ms: 20
-      decay_ms: 150
-      sustain: 1.0
-      release_ms: 400
-
-  pad:
-    waveform: saw
-    adsr:
-      attack_ms: 400
-      decay_ms: 800
-      sustain: 0.7
-      release_ms: 1200
-
-  ep:
-    waveform: additive
-    partials: [1, 2, 3, 4]
-    amps:     [1.0, 0.5, 0.25, 0.12]
-    adsr:
-      attack_ms: 10
-      decay_ms: 400
-      sustain: 0.3
-      release_ms: 600
+drums:
+  kick_additive:
+    kind: additive
+    params:
+      dur_s: 0.35
+      f_start_hz: 150.0
+      f_end_hz: 50.0
+      tau_freq_ms: 22.0
+      amps: [1.0, 0.5, 0.25, 0.15, 0.10]
+      ratios: [1.0, 1.6, 2.3, 3.5, 4.2]
+      tau_amp_ms: [120, 90, 70, 55, 45]
+      click_ms: 8.0
+      click_mix: 0.15
+      hp_hz: 22.0
+      drive: 1.0

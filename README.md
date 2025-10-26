@@ -44,7 +44,7 @@ tp-audio-full-starter/
 - **Python 3.9+**
 - Librerías necesarias:
   ```bash
-  pip install numpy scipy soundfile pyyaml
+  pip install numpy scipy soundfile pyyaml mido
   ```
 - (Opcional) `matplotlib` si querés generar espectrogramas.
 
@@ -53,14 +53,14 @@ tp-audio-full-starter/
 ## 🧱 Activar entorno virtual
 
 ```powershell
-python -m venv .venv
-.\.venv\Scripts ctivate
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.venv\Scripts\Activate.ps1
 ```
 
-Luego instalá las dependencias:
+Luego instalá las dependencias dentro del entorno:
 
 ```powershell
-pip install numpy scipy soundfile pyyaml
+pip install numpy scipy soundfile pyyaml mido
 ```
 
 ---
