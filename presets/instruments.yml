@@ -11,25 +11,7 @@ ks:
     noise_mix: 0.02      # leve textura
     stiffness: 0.001     # dispersión muy leve (nylon blando)
     transpose: 0
-
-  # 🎸 Guitarra acústica (acero)
-  steel:
-    rho: 0.995           # decay más corto → ataque más metálico
-    pick_pos: 0.22
-    S: 0.25              # más brillo
-    noise_mix: 0.025
-    stiffness: 0.004     # cuerdas rígidas → brillo metálico
-    transpose: 0
-
-  # 🎸 Guitarra eléctrica limpia
-  electric:
-    rho: 0.997
-    pick_pos: 0.18
-    S: 0.25
-    noise_mix: 0.02
-    stiffness: 0.002     # leve rigidez para tono controlado
-    transpose: 0
-
+    
   # 🎸 Bajo (natural)
   bass:
     rho: 0.9985

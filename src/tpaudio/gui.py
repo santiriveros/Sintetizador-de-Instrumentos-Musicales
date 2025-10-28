@@ -5,7 +5,7 @@ from tkinter import ttk, filedialog, messagebox
 from pathlib import Path
 import numpy as np
 
-# --- NUEVO: imports para espectrograma ---
+# --- NUEVO: espectrograma ---
 import soundfile as sf
 import matplotlib.pyplot as plt
 
@@ -21,7 +21,6 @@ try:
     from tpaudio.constants import SR
     from tpaudio.config import load_presets
     from tpaudio.core.audio_io import write_wav
-    from tpaudio.core.timeline import lay_notes_on_timeline
     from tpaudio.core.mixer import mix_tracks
     from tpaudio.midi.loader import load_notes
 
@@ -29,7 +28,7 @@ try:
     from tpaudio.synth.sample_piano import load_samples, render_note_sample
     from tpaudio.synth.adsr import render_kick_additive
 
-    # === efectos integrados (tus clases) ===
+    # Efectos integrados
     from tpaudio.effects.flanger import Flanger
     from tpaudio.effects.reverb import Reverb
 except Exception as e:
@@ -195,7 +194,10 @@ class App(tk.Tk):
 
         self._midi_paths_cache = {}  # {basename: fullpath}
 
-        # NUEVO: ruta del último WAV efectivamente renderizado
+        # NUEVO: cache de notas para acelerar KS / sample / kick
+        self._note_cache = {}  # {(id(rf), pitch, dur_ms, vel_bin): np.ndarray}
+
+        # Último WAV realmente renderizado (para espectrograma)
         self._last_rendered_wav: str | None = None
 
         self._build_ui()
@@ -222,11 +224,10 @@ class App(tk.Tk):
         ttk.Entry(frm_files, textvariable=self.out_path, width=64).grid(row=1, column=1, padx=6, sticky="w")
         ttk.Button(frm_files, text="Elegir", command=self._browse_out).grid(row=1, column=2, padx=6)
 
-        # === Efectos (sliders prolijos) ===
+        # === Efectos (sliders) ===
         frm_fx = ttk.LabelFrame(container, text="Efectos (sobre la mezcla de todas las pistas habilitadas)")
         frm_fx.pack(fill="x", pady=8)
 
-        # Subframes lado a lado
         fx_left  = ttk.LabelFrame(frm_fx, text="🌊 Reverb")
         fx_right = ttk.LabelFrame(frm_fx, text="🎸 Flanger")
         fx_left.grid(row=0, column=0, padx=6, pady=6, sticky="nsew")
@@ -234,21 +235,19 @@ class App(tk.Tk):
         frm_fx.columnconfigure(0, weight=1)
         frm_fx.columnconfigure(1, weight=1)
 
-        # Reverb controls
         ttk.Checkbutton(fx_left, text="Activar", variable=self.reverb_on).grid(row=0, column=0, sticky="w", padx=6, pady=(6,2))
-        self._add_labeled_scale(fx_left, "Tamaño de sala", 0.0, 1.0, self.rv_room, resolution=0.01, row=1)
-        self._add_labeled_scale(fx_left, "Duración T60 (s)", 0.3, 5.0, self.rv_decay, resolution=0.1, row=2)
-        self._add_labeled_scale(fx_left, "Pre-delay (ms)", 0.0, 80.0, self.rv_predelay, resolution=1.0, row=3)
-        self._add_labeled_scale(fx_left, "Brillo", 0.0, 1.0, self.rv_bright, resolution=0.01, row=4)
-        self._add_labeled_scale(fx_left, "Mix (dry/wet)", 0.0, 1.0, self.rv_mix, resolution=0.01, row=5)
+        self._add_labeled_scale(fx_left, "Tamaño de sala", 0.0, 1.0, self.rv_room,     0.01, 1)
+        self._add_labeled_scale(fx_left, "Duración T60 (s)", 0.3, 5.0, self.rv_decay,  0.1,  2)
+        self._add_labeled_scale(fx_left, "Pre-delay (ms)",   0.0, 80.0, self.rv_predelay, 1.0, 3)
+        self._add_labeled_scale(fx_left, "Brillo",           0.0, 1.0, self.rv_bright, 0.01, 4)
+        self._add_labeled_scale(fx_left, "Mix (dry/wet)",    0.0, 1.0, self.rv_mix,    0.01, 5)
 
-        # Flanger controls
         ttk.Checkbutton(fx_right, text="Activar", variable=self.flanger_on).grid(row=0, column=0, sticky="w", padx=6, pady=(6,2))
-        self._add_labeled_scale(fx_right, "Velocidad LFO (Hz)", 0.05, 2.0, self.fl_rate, resolution=0.01, row=1)
-        self._add_labeled_scale(fx_right, "Profundidad (ms)", 0.0, 12.0, self.fl_depth_ms, resolution=0.1, row=2)
-        self._add_labeled_scale(fx_right, "Retardo base (ms)", 0.5, 6.0, self.fl_base_ms, resolution=0.1, row=3)
-        self._add_labeled_scale(fx_right, "Feedback", -0.95, 0.95, self.fl_feedback, resolution=0.01, row=4)
-        self._add_labeled_scale(fx_right, "Mix (dry/wet)", 0.0, 1.0, self.fl_mix, resolution=0.01, row=5)
+        self._add_labeled_scale(fx_right, "Velocidad LFO (Hz)", 0.05, 2.0, self.fl_rate,     0.01, 1)
+        self._add_labeled_scale(fx_right, "Profundidad (ms)",   0.0,  12.0, self.fl_depth_ms,0.1,  2)
+        self._add_labeled_scale(fx_right, "Retardo base (ms)",  0.5,  6.0,  self.fl_base_ms, 0.1,  3)
+        self._add_labeled_scale(fx_right, "Feedback",          -0.95, 0.95, self.fl_feedback,0.01, 4)
+        self._add_labeled_scale(fx_right, "Mix (dry/wet)",      0.0,  1.0,  self.fl_mix,     0.01, 5)
 
         # === Pistas ===
         frm_tracks = ttk.LabelFrame(container, text="Pistas")
@@ -288,14 +287,12 @@ class App(tk.Tk):
         bar = ttk.Frame(container)
         bar.pack(fill="x", pady=8)
 
-# Botón de espectrograma: arranca deshabilitado
         self.btn_spec = ttk.Button(bar, text="Ver espectrograma", command=self._show_last_spectrogram)
         self.btn_spec.pack(side="left", padx=6)
-        self.btn_spec.state(["disabled"])  # ← importante: deshabilitado correctamente al inicio
+        self.btn_spec.state(["disabled"])  # deshabilitado hasta el 1er render
 
         ttk.Button(bar, text="Renderizar WAV", command=self._render).pack(side="right", padx=10)
         ttk.Button(bar, text="Salir", command=self.destroy).pack(side="right", padx=6)
-
 
     # --- helper de slider con etiqueta y valor ---
     def _add_labeled_scale(self, parent, label, minv, maxv, var, resolution=0.01, row=0):
@@ -305,9 +302,9 @@ class App(tk.Tk):
         ttk.Label(frm, text=label).grid(row=0, column=0, sticky="w", padx=(0,8))
         val_lbl = ttk.Label(frm, width=8, anchor="e")
         val_lbl.grid(row=0, column=2, sticky="e")
-        def _upd(v=None):
+        def _upd(_=None):
             val_lbl.config(text=f"{var.get():.2f}")
-        scale = ttk.Scale(frm, from_=minv, to=maxv, variable=var, command=lambda _: _upd())
+        scale = ttk.Scale(frm, from_=minv, to=maxv, variable=var, command=_upd)
         scale.grid(row=0, column=1, sticky="ew")
         _upd()
 
@@ -409,8 +406,8 @@ class App(tk.Tk):
         self.midi_path.set(path)
         self.notes = notes
 
-        # Agrupar por pista
-        self.by_track = {}
+        # Agrupar por pista (O(1) en render)
+        self.by_track.clear()
         for (ti, t0, dur, pitch, vel) in self.notes:
             self.by_track.setdefault(ti, []).append((ti, t0, dur, pitch, vel))
 
@@ -433,6 +430,9 @@ class App(tk.Tk):
             self.tracks_cfg.append(cfg)
             self.tree.insert("", "end", iid=str(ti),
                              values=("✔", cfg.synth.get(), cfg.preset.get(), cfg.detected, cfg.emoji))
+
+        # Invalida cache por nuevo MIDI
+        self._note_cache.clear()
 
         messagebox.showinfo("MIDI", f"Notas: {len(self.notes)} | Pistas: {len(self.tracks_cfg)}")
 
@@ -464,6 +464,8 @@ class App(tk.Tk):
                 cfg.preset.set("")  # limpiar en modelo
                 self.tree.set(str(cfg.track_idx), "synth", bank)
                 self.tree.set(str(cfg.track_idx), "preset", "")
+        # Invalida cache porque cambia síntesis/preset
+        self._note_cache.clear()
 
     def _apply_to_selected(self):
         sel = self.tree.selection()
@@ -475,44 +477,43 @@ class App(tk.Tk):
         cfg.preset.set(self.cmb_preset.get())  # puede ser ""
         self.tree.set(str(ti), "synth", cfg.synth.get())
         self.tree.set(str(ti), "preset", cfg.preset.get())
+        # Invalida cache porque cambia síntesis/preset
+        self._note_cache.clear()
 
     # ---- Visualización: espectrograma del último WAV renderizado ----
-      # ---- Visualización: espectrograma del último WAV renderizado ----
     def _show_spectrogram(self, wav_path: str):
         """Carga el WAV final y muestra su espectrograma en una ventana de Matplotlib."""
         try:
             y, fs = sf.read(wav_path, dtype="float32")
-            if y.ndim > 1:
-                y = y.mean(axis=1)  # convertir a mono
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo leer el WAV:\n{e}")
             return
 
-        # evitar log(0): agregar piso de ruido muy bajo
-        y = y + 1e-12
-
-        plt.close('all')  # cerrar figuras previas
-        fig, ax = plt.subplots(figsize=(10, 5))
-        Pxx, freqs, bins, im = ax.specgram(
-                y,
-                NFFT=1024,
-                Fs=fs,
-                noverlap=512,
-                cmap="inferno",
-                vmin=-120,  # piso de dB
-                vmax=-20    # techo (ajustalo según brillo deseado)
+        plt.close('all')
+        if y.ndim == 1:
+            fig, ax = plt.subplots(figsize=(10, 5))
+            sig = y + 1e-12
+            _, _, _, im = ax.specgram(
+                sig, NFFT=1024, Fs=fs, noverlap=512, cmap="inferno",
+                vmin=-120, vmax=-20
             )
-        ax.set_title(f"Espectrograma: {Path(wav_path).name}")
-        ax.set_xlabel("Tiempo [s]")
-        ax.set_ylabel("Frecuencia [Hz]")
-        fig.colorbar(im, ax=ax, label="Amplitud (dB)")
-        plt.tight_layout()
-        plt.show()
+            ax.set_title(f"Espectrograma: {Path(wav_path).name}")
+            ax.set_xlabel("Tiempo [s]"); ax.set_ylabel("Frecuencia [Hz]")
+            cbar = fig.colorbar(im, ax=ax, pad=0.02); cbar.set_label("Amplitud [dB]")
+        else:
+            fig, (axL, axR) = plt.subplots(1, 2, figsize=(12, 5), sharey=True)
+            sigL = y[:, 0] + 1e-12
+            sigR = y[:, 1] + 1e-12
+            _, _, _, imL = axL.specgram(sigL, NFFT=1024, Fs=fs, noverlap=512, cmap="inferno", vmin=-120, vmax=-20)
+            _, _, _, imR = axR.specgram(sigR, NFFT=1024, Fs=fs, noverlap=512, cmap="inferno", vmin=-120, vmax=-20)
+            axL.set_title("Left"); axR.set_title("Right")
+            for ax in (axL, axR): ax.set_xlabel("Tiempo [s]")
+            axL.set_ylabel("Frecuencia [Hz]")
+            cbar = fig.colorbar(imR, ax=[axL, axR], pad=0.02); cbar.set_label("Amplitud [dB]")
+        plt.tight_layout(); plt.show()
 
     def _show_last_spectrogram(self):
-        """Abre el espectrograma del último WAV realmente generado. Solo habilitado tras el 1er render."""
         if not self._last_rendered_wav:
-            # No debería ocurrir porque el botón está deshabilitado hasta el primer render.
             messagebox.showwarning("Espectrograma", "Aún no generaste ningún WAV.")
             return
         p = Path(self._last_rendered_wav)
@@ -539,10 +540,8 @@ class App(tk.Tk):
         if synth == "kick_adsr":
             bank, name = ("drums", "kick_additive")
             if preset:
-                if "." in preset:
-                    bank, name = preset.split(".", 1)
-                else:
-                    bank, name = "drums", preset
+                if "." in preset: bank, name = preset.split(".", 1)
+                else: bank, name = "drums", preset
             p = get_params(bank, name) or {
                 "dur_s": 0.35,
                 "f_start_hz": 150.0, "f_end_hz": 50.0, "tau_freq_ms": 22.0,
@@ -573,6 +572,35 @@ class App(tk.Tk):
 
         raise SystemExit(f"Motor no reconocido: {synth}")
 
+    # ====== OPTIMIZACIONES: caché de notas + timeline rápido ======
+    def _cached_note(self, rf, pitch, dur, vel):
+        """Devuelve el audio de una nota cacheada por (id(rf), pitch, dur_ms, vel_bin)."""
+        dur_ms = int(round(dur * 1000.0))
+        vel_bin = int(vel) // 2
+        key = (id(rf), pitch, dur_ms, vel_bin)
+        seg = self._note_cache.get(key)
+        if seg is None:
+            seg = rf(pitch, dur, vel, SR)
+            if seg.dtype != np.float32:
+                seg = seg.astype(np.float32, copy=False)
+            self._note_cache[key] = seg
+        return seg
+
+    def _lay_notes_on_timeline_fast(self, notes, rf, sr=SR):
+        """Versión rápida: usa cache por nota y suma por slicing. 'notes' es una lista de UNA pista."""
+        if not notes:
+            return np.zeros(1, dtype=np.float32)
+        t_end = max(t0 + dur for (_ti, t0, dur, _p, _v) in notes)
+        n = int(np.ceil(t_end * sr)) + 1
+        y = np.zeros(n, dtype=np.float32)
+        for (_ti, t0, dur, pitch, vel) in notes:
+            seg = self._cached_note(rf, pitch, dur, vel)
+            i0 = int(round(t0 * sr))
+            i1 = min(i0 + len(seg), n)
+            if i0 < n:
+                y[i0:i1] += seg[:i1 - i0]
+        return y
+
     # ---- Render principal (mezcla + FX) ----
     def _render(self):
         if not self.notes:
@@ -589,25 +617,26 @@ class App(tk.Tk):
         needs_samples = any(cfg.synth.get() == "piano_sample" for cfg in self.tracks_cfg)
         samples = load_samples(str(DEFAULT_SAMPLE_DIR)) if needs_samples else None
 
-        # Render por pista
+        # Render por pista (rápido)
         tracks_audio = []
         for cfg in self.tracks_cfg:
             if not cfg.enabled.get():
                 continue
-            tnotes = [n for n in self.notes if n[0] == cfg.track_idx]
+            tnotes = self.by_track.get(cfg.track_idx, [])  # O(1)
             rf = self._make_renderer(cfg, samples)
-            y = lay_notes_on_timeline(tnotes, rf)
+            y = self._lay_notes_on_timeline_fast(tnotes, rf)
+            if y.dtype != np.float32:
+                y = y.astype(np.float32, copy=False)
             tracks_audio.append(y)
 
         if not tracks_audio:
             messagebox.showwarning("Render", "No hay pistas habilitadas.")
             return
 
-        # Mezcla
-        y_mix = mix_tracks(tracks_audio, normalize=True, ceiling_dbfs=-1.0)
+        # Mezcla sin normalizar (normalizamos una sola vez al final)
+        y_mix = mix_tracks(tracks_audio, normalize=False)
 
-        # === Aplicación de FX sobre la mezcla ===
-        # 1) Flanger (antes que la reverb por efecto creativo tipo "chorus metálico")
+        # === FX sólo si están activos (evita casts/cópias si OFF) ===
         if self.flanger_on.get():
             fl = Flanger(
                 rate_hz=float(self.fl_rate.get()),
@@ -618,7 +647,6 @@ class App(tk.Tk):
             )
             y_mix = fl.process(y_mix.astype(np.float64), SR).astype(np.float32)
 
-        # 2) Reverb (cola final)
         if self.reverb_on.get():
             rv = Reverb(
                 room_size=float(self.rv_room.get()),
@@ -633,11 +661,11 @@ class App(tk.Tk):
         y_out = _normalize(y_mix)
         write_wav(out, y_out, SR)
 
-        # Guardar ruta del último WAV y habilitar botón espectrograma
+        # Guardar ruta del último WAV y habilitar espectrograma
         self._last_rendered_wav = out
         self.btn_spec.state(["!disabled"])
 
-        # Mensaje adaptativo según uso de FX
+        # Mensaje adaptativo según FX
         fx_active = self.flanger_on.get() or self.reverb_on.get()
         fx_text = "con FX" if fx_active else "sin FX"
         messagebox.showinfo("Render", f"Archivo generado {fx_text}:\n{out}")
