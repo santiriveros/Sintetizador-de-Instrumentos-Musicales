@@ -243,6 +243,7 @@ class App(tk.Tk):
 
         self.tree = ttk.Treeview(self.frm_tracks, columns=("enabled", "synth", "preset", "instrument", "emoji"),
                                  show="headings", height=16)
+        self.tree.bind("<Button-1>", self._on_tree_click)
         self.tree.heading("enabled", text="Usar")
         self.tree.heading("synth", text="Motor")
         self.tree.heading("preset", text="Preset")
@@ -279,6 +280,35 @@ class App(tk.Tk):
         frm_actions.pack(fill="x", padx=4, pady=6)
         ttk.Button(frm_actions, text="Generar WAV", command=self._render).pack(side="right", padx=6)
         ttk.Button(frm_actions, text="Salir", command=self.destroy).pack(side="right", padx=6)
+
+
+    def _on_tree_click(self, event):
+        """Toggle de la columna 'enabled' (Usar) al clickear el tick."""
+        # ¿Qué columna y fila se clickeó?
+        col = self.tree.identify_column(event.x)   # '#1', '#2', ...
+        row = self.tree.identify_row(event.y)      # iid de la fila (track id)
+
+        # Solo actuamos si fue en la PRIMERA columna ('enabled')
+        if col != '#1' or not row:
+            return
+
+        try:
+            ti = int(row)
+        except ValueError:
+            return
+
+        # Toggle visual y estado del modelo
+        current = self.tree.set(row, "enabled")    # '✔' o '✖'
+        new = "✖" if current == "✔" else "✔"
+        self.tree.set(row, "enabled", new)
+
+        cfg = self._cfg_by_idx(ti)
+        if cfg is not None:
+            cfg.enabled.set(new == "✔")
+
+        # Evitar que el Treeview cambie la selección por el click en el icono
+        return "break"
+
 
     # ---------- MIDI combo ----------
     def _refresh_midi_list(self, _evt=None):
