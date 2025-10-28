@@ -1,6 +1,6 @@
 from .synth.additive import Additive
 from .synth.karplus import render_note_ks
-from .effects.delay import delay
+from .effects.flanger import delay
 from .effects.reverb import simple_reverb
 
 def synth_from_preset(synth_kind: str, preset: dict):
