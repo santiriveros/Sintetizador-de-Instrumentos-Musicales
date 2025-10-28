@@ -72,6 +72,6 @@ def render_kick_additive(
 
     # 🔥 BOOST: aumentar volumen final (post normalización)
     y /= (np.max(np.abs(y)) + 1e-9)
-    y *= 1.3  # Aumenta 30% el nivel general (ajustá 1.2–1.5)
+    y *= 1.5  # Aumenta 30% el nivel general (ajustá 1.2–1.5)
     
     return y.astype(np.float32)
