@@ -21,10 +21,10 @@ tp-audio-full-starter/
 │       │   ├── karplus.py         ← motor Karplus–Strong físico
 │       │   ├── sample_piano.py    ← motor de reproducción por muestras
 │       │   ├── additive.py        ← síntesis aditiva
-│       │   └── ...
+│       │   └── adsr.py            ← algoritmo ADSR exponencial
 │       ├── core/                  ← utilidades comunes (mixer, timeline, I/O)
 │       ├── midi/loader.py         ← carga y parseo de archivos MIDI
-│       └── ...
+│       └── gui.py                 ← interfaz grafica
 │
 ├── presets/
 │   └── instruments.yml            ← parámetros de instrumentos
@@ -53,7 +53,9 @@ tp-audio-full-starter/
 ## 🧱 Activar entorno virtual
 
 ```powershell
+- Primero:
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+- Segundo:
 .venv\Scripts\Activate.ps1
 ```
 
@@ -61,62 +63,6 @@ Luego instalá las dependencias dentro del entorno:
 
 ```powershell
 pip install numpy scipy soundfile pyyaml mido
-```
-
----
-
-## 🎼 Modo simple (una pista)
-
-Renderiza un solo instrumento (por ejemplo guitarra nylon):
-
-```powershell
-python -m src.tpaudio.main --midi "melodia11.mid" --synth ks --preset nylon --preset-instruments "presets/instruments.yml" --out "melodia11_nylon.wav"
-```
-
-Opciones comunes:
-
-| Argumento | Descripción |
-|------------|--------------|
-| `--midi` | Ruta al archivo `.mid` |
-| `--synth` | Tipo de sintetizador (`ks`, `sample`, `additive`, `adsr`) |
-| `--preset` | Nombre del preset dentro de `instruments.yml` |
-| `--out` | Archivo WAV de salida |
-| `--preset-instruments` | Ruta al YAML de presets |
-
----
-
-## 🎚️ Modo avanzado (multiinstrumento)
-
-El motor **`render_multi.py`** permite renderizar **1, 2 o más instrumentos simultáneamente**,  
-asignando pistas MIDI específicas a cada instrumento.
-
-### Formato de uso:
-
-```
-python -m src.tpaudio.render_multi --midi "C:\melodiax.mid" --inst "nombre:tipo:tracks" [--inst ...] --preset-instruments "presets/instruments.yml" --sample-dir "samples_piano_1" --out "archivo.wav"
-```
-
-- `nombre`: nombre del preset (por ejemplo `piano`, `nylon`, `bass`)
-- `tipo`: tipo de síntesis (`sample`, `ks`, `additive`, etc.)
-- `tracks`: canales o rango de canales MIDI (ej: `0,1,3-5`)
-
----
-
-### 🪕 Ejemplos
-
-#### 🎹 Solo piano (canales 0–15)
-```powershell
-python -m src.tpaudio.render_multi --midi "melodia13.mid" --inst "piano:sample:0-15" --preset-instruments "presets/instruments.yml" --sample-dir "samples_piano_1" --out "melodia13_piano_solo.wav"
-```
-
-#### 🎸 Solo bajo (canales 0–15)
-```powershell
-python -m src.tpaudio.render_multi --midi "melodia13.mid" --inst "bass:ks:0-15" --preset-instruments "presets/instruments.yml" --sample-dir "samples_piano_1" --out "melodia13_bajo_solo.wav"
-```
-
-#### 🎹 Piano + 🎸 Nylon + 🎸 Bajo
-```powershell
-python -m src.tpaudio.render_multi --midi "melodia13.mid" --inst "piano:sample:4,6,9" --inst "nylon:ks:0,2,3" --inst "bass:ks:7,8" --preset-instruments "presets/instruments.yml" --sample-dir "samples_piano_1" --out "melodia13_piano_nylon_bajo.wav"
 ```
 
 ---
@@ -152,6 +98,43 @@ Cada parámetro controla:
 - `noise_mix`: textura inicial
 - `transpose`: cambio de octava (opcional)
 
+```yaml
+drums:
+  kick_fuerte:
+      kind: additive
+      params:
+        dur_s: 0.35
+        f_start_hz: 150.0
+        f_end_hz: 50.0
+        tau_freq_ms: 22.0
+        amps: [1.5, 0.75, 0.4, 0.2, 0.15]
+        ratios: [1.0, 1.6, 2.3, 3.5, 4.2]
+        tau_amp_ms: [120, 90, 70, 55, 45]
+        click_ms: 8.0
+        click_mix: 0.15
+        hp_hz: 22.0
+        drive: 2.0
+```
+
+Cada parámetro controla:
+- `dur_s`: duración total del sonido del golpe (en segundos).
+- `f_start_hz`: frecuencia inicial del oscilador (pitch al inicio del golpe).
+- `f_end_hz`: frecuencia final del oscilador (pitch al final del golpe).
+- `tau_freq_ms`: constante de tiempo (en milisegundos) del decaimiento exponencial del pitch.
+- `ratios`: relación de frecuencias de los parciales armónicos que se suman a la fundamental.
+- `amps`: amplitud relativa de cada parcial de ratios.
+- `tau_amp_ms`: constante de decaimiento (en milisegundos) de la amplitud de cada parcial.
+- `click_ms`: duración del pulso de ruido blanco inicial (en milisegundos).
+- `click_mix`: mezcla relativa del ruido inicial con el cuerpo del sonido (0–1).
+→ Controla cuánta energía del click se mezcla.
+→ Valores altos → golpe más punzante y agresivo.
+-`drive`: factor de distorsión suave aplicado a la señal final.
+→ Realza armónicos y compresión.
+→ Valores > 1.0 generan saturación tipo overdrive.
+-`hp_hz`: frecuencia de corte del filtro pasa-altos (high-pass) aplicado al final.
+→ Elimina graves muy bajos o DC offset.
+→ Subirlo aclara el sonido; bajarlo lo hace más “profundo”.
+
 ---
 
 ## 🧪 Archivos de salida
@@ -160,29 +143,17 @@ Cada parámetro controla:
 - Todos normalizados a **-1 dBFS**.
 - Duración y mezcla automática según el MIDI cargado.
 
----
 
-## 📦 Créditos
+## Uso del programa:
 
-Implementación desarrollada por **[Tu Nombre / Equipo]**,  
-basada en la extensión del algoritmo **Karplus–Strong (Jaffe & Smith, 1983)**  
-con mejoras de dispersión física y soporte multiinstrumento.
-
----
-
-## 🪄 Tips
-
-- Para probar una escala de prueba rápida:
-  ```powershell
-  python -m src.tpaudio.main --mode test-scale --synth ks --preset nylon --preset-instruments "presets/instruments.yml" --out "escala_nylon.wav"
-  ```
-- Podés listar los tracks del MIDI con:
-  ```powershell
-  python -m src.tpaudio.tools.list_midi_tracks "melodia13.mid"
-  ```
+1. Dale a compilar al archivo gui.py.
+2. Al abrirse la ventana emergente selecciona un archivo midi sobre el cual trabajar.
+3. Selecciona que instumentos y con cuales presets pertenecen en cada pista.
+4. Escoge efectos a gusto para agregarle al sonido de salida en su totalidad.
+5. Crea el archivo .wav y/o al espectograma de tu salida. 
 
 ---
 
 🎧 **¡Listo!**  
-Ahora podés generar mezclas completas de piano, guitarra y bajo  
+Ahora podés generar mezclas completas de piano, guitarra, bajo y drums.  
 directamente desde cualquier archivo MIDI.

@@ -39,20 +39,25 @@ ks:
     stiffness: 0.002     # leve dispersión física → graves reales
     transpose: 0
 
-  # 🪕 Banjo
-  banjo:
-    rho: 0.994
-    pick_pos: 0.28       # ataque brillante
-    S: 0.05              # casi sin suavizado
-    noise_mix: 0.03
-    stiffness: 0.007     # rigidez fuerte → brillo y "twang" realista
-    transpose: 0
-
-
 # ============================================================
 # Additive synthesis (sin cambios)
 # ============================================================
 drums:
+  kick_fuerte:
+    kind: additive
+    params:
+      dur_s: 0.35
+      f_start_hz: 150.0
+      f_end_hz: 50.0
+      tau_freq_ms: 22.0
+      amps: [1.5, 0.75, 0.4, 0.2, 0.15]
+      ratios: [1.0, 1.6, 2.3, 3.5, 4.2]
+      tau_amp_ms: [120, 90, 70, 55, 45]
+      click_ms: 8.0
+      click_mix: 0.15
+      hp_hz: 22.0
+      drive: 2.0
+
   kick_additive:
     kind: additive
     params:
@@ -67,3 +72,18 @@ drums:
       click_mix: 0.15
       hp_hz: 22.0
       drive: 1.0
+
+  bongo:
+    kind: additive
+    params:
+      dur_s: 0.55
+      f_start_hz: 180.0
+      f_end_hz: 90.0
+      tau_freq_ms: 28.0
+      ratios:   [1.0, 1.5, 2.0, 2.7, 3.6]
+      amps:     [1.00, 0.45, 0.28, 0.18, 0.10]
+      tau_amp_ms: [150, 120, 100, 80, 65]
+      click_ms: 2.5        # mucho más corto
+      click_mix: 0.25      # más presencia
+      drive: 1.0
+      hp_hz: 40.0          # corta graves ultra bajos para más pegada
