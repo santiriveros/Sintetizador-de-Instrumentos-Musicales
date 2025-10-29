@@ -4,8 +4,6 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from pathlib import Path
 import numpy as np
-
-# --- NUEVO: espectrograma ---
 import soundfile as sf
 import matplotlib.pyplot as plt
 
@@ -28,7 +26,6 @@ try:
     from tpaudio.synth.sample_piano import load_samples, render_note_sample
     from tpaudio.synth.adsr import render_kick_additive
 
-    # Efectos integrados
     from tpaudio.effects.flanger import Flanger
     from tpaudio.effects.reverb import Reverb
 except Exception as e:
@@ -46,46 +43,24 @@ DEFAULT_SAMPLE_DIR = PROJECT_ROOT / "samples_piano_1"
 DEFAULT_PRESET_INSTR = PROJECT_ROOT / "presets" / "instruments.yml"
 DEFAULT_PRESET_FX = PROJECT_ROOT / "presets" / "effects.yml"
 
+
 def _normalize(y: np.ndarray) -> np.ndarray:
     return (y / (np.max(np.abs(y)) + 1e-9)).astype(np.float32)
 
-# ===== GM program names =====
+
+# ===== GM y emojis =====
+# Lista reducida + uso de módulo para no explotar si el prog excede
 GM_PROGRAM_NAMES = [
     "Acoustic Grand Piano","Bright Acoustic Piano","Electric Grand Piano","Honky-tonk Piano",
     "Electric Piano 1","Electric Piano 2","Harpsichord","Clavinet",
-    "Celesta","Glockenspiel","Music Box","Vibraphone",
-    "Marimba","Xylophone","Tubular Bells","Dulcimer",
-    "Drawbar Organ","Percussive Organ","Rock Organ","Church Organ",
-    "Reed Organ","Accordion","Harmonica","Tango Accordion",
     "Acoustic Guitar (nylon)","Acoustic Guitar (steel)","Electric Guitar (jazz)","Electric Guitar (clean)",
-    "Electric Guitar (muted)","Overdriven Guitar","Distortion Guitar","Guitar harmonics",
-    "Acoustic Bass","Electric Bass (finger)","Electric Bass (pick)","Fretless Bass",
-    "Slap Bass 1","Slap Bass 2","Synth Bass 1","Synth Bass 2",
     "Violin","Viola","Cello","Contrabass",
-    "Tremolo Strings","Pizzicato Strings","Orchestral Harp","Timpani",
     "String Ensemble 1","String Ensemble 2","SynthStrings 1","SynthStrings 2",
-    "Choir Aahs","Voice Oohs","Synth Voice","Orchestra Hit",
-    "Trumpet","Trombone","Tuba","Muted Trumpet",
-    "French Horn","Brass Section","SynthBrass 1","SynthBrass 2",
+    "Trumpet","Trombone","Tuba","French Horn",
     "Soprano Sax","Alto Sax","Tenor Sax","Baritone Sax",
-    "Oboe","English Horn","Bassoon","Clarinet",
-    "Piccolo","Flute","Recorder","Pan Flute",
-    "Blown Bottle","Shakuhachi","Whistle","Ocarina",
-    "Lead 1 (square)","Lead 2 (sawtooth)","Lead 3 (calliope)","Lead 4 (chiff)",
-    "Lead 5 (charang)","Lead 6 (voice)","Lead 7 (fifths)","Lead 8 (bass+lead)",
-    "Pad 1 (new age)","Pad 2 (warm)","Pad 3 (polysynth)","Pad 4 (choir)",
-    "Pad 5 (bowed)","Pad 6 (metallic)","Pad 7 (halo)","Pad 8 (sweep)",
-    "FX 1 (rain)","FX 2 (soundtrack)","FX 3 (crystal)","FX 4 (atmosphere)",
-    "FX 5 (brightness)","FX 6 (goblins)","FX 7 (echoes)","FX 8 (sci-fi)",
-    "Sitar","Banjo","Shamisen","Koto",
-    "Kalimba","Bag pipe","Fiddle","Shanai",
-    "Tinkle Bell","Agogo","Steel Drums","Woodblock",
-    "Taiko Drum","Melodic Tom","Synth Drum","Reverse Cymbal",
-    "Guitar Fret Noise","Breath Noise","Seashore","Bird Tweet",
-    "Telephone Ring","Helicopter","Applause","Gunshot"
+    "Flute","Oboe","Clarinet","Bassoon",
+    "Synth Bass 1","Synth Bass 2","Lead 1 (square)","Lead 2 (sawtooth)"
 ]
-
-# ===== Emojis por familia =====
 INSTRUMENT_EMOJIS = {
     "piano": "🎹", "organ": "🎹", "keyboard": "🎹",
     "guitar": "🎸", "bass": "🎸",
@@ -94,28 +69,26 @@ INSTRUMENT_EMOJIS = {
     "trumpet": "🎺", "trombone": "🎺", "horn": "🎺", "tuba": "🎺",
     "drum": "🥁", "percussion": "🥁", "timpani": "🥁",
     "synth": "🎛️", "lead": "🎛️", "pad": "🎛️",
-    "voice": "🎤", "vocal": "🎤",
+    "voice": "🎤",
 }
-def guess_emoji(instr_name: str) -> str:
-    n = (instr_name or "").lower()
-    for key, emoji in INSTRUMENT_EMOJIS.items():
-        if key in n:
-            return emoji
+
+
+def guess_emoji(name: str) -> str:
+    n = (name or "").lower()
+    for k, e in INSTRUMENT_EMOJIS.items():
+        if k in n:
+            return e
     return "🎵"
 
-def suggest_synth(instr_name: str) -> str:
-    n = (instr_name or "").lower()
-    if "drum" in n or "percussion" in n or "timpani" in n or "cymbal" in n:
+
+def suggest_synth(name: str) -> str:
+    n = (name or "").lower()
+    if "drum" in n or "perc" in n or "timpani" in n or "cymbal" in n:
         return "kick_adsr"
-    if "piano" in n or "keyboard" in n or "organ" in n or "harpsichord" in n:
+    if "piano" in n or "organ" in n or "keyboard" in n or "harpsichord" in n:
         return "piano_sample"
-    if "guitar" in n or "bass" in n or "string" in n or "violin" in n or "cello" in n or "harp" in n:
-        return "ks"
-    if "sax" in n or "trumpet" in n or "trombone" in n or "horn" in n or "tuba" in n or "clarinet" in n or "flute" in n:
-        return "ks"
-    if "synth" in n or "lead" in n or "pad" in n:
-        return "ks"
     return "ks"
+
 
 def detect_midi_instruments(mid_path: str):
     results = []
@@ -128,9 +101,10 @@ def detect_midi_instruments(mid_path: str):
             for msg in track:
                 if msg.type == "program_change":
                     prog = int(getattr(msg, "program", 0))
-                    name = GM_PROGRAM_NAMES[prog] if 0 <= prog < len(GM_PROGRAM_NAMES) else f"Program {prog}"
+                    name = GM_PROGRAM_NAMES[prog % len(GM_PROGRAM_NAMES)]
                     break
             if not name:
+                # detectar drums si aparece canal 10
                 for msg in track:
                     if hasattr(msg, "channel") and int(msg.channel) == 9:
                         name = "Drum Kit (Channel 10)"
@@ -142,13 +116,14 @@ def detect_midi_instruments(mid_path: str):
         print("[WARN] Error leyendo instrumentos del MIDI:", e)
     return results
 
-# ===== Helpers =====
+
 def list_mid_files_in_root(root_folder: Path):
     try:
         lst = list(root_folder.glob("*.mid")) + list(root_folder.glob("*.midi"))
         return sorted(lst, key=lambda p: p.name.lower())
     except Exception:
         return []
+
 
 # ===== GUI =====
 class TrackConfig:
@@ -157,33 +132,34 @@ class TrackConfig:
         self.synth = tk.StringVar(value="ks")
         self.preset = tk.StringVar(value="")
         self.enabled = tk.BooleanVar(value=True)
+        self.volume = tk.DoubleVar(value=1.0)  # 🔊 volumen 0–1 por pista
         self.detected = ""
         self.emoji = "🎵"
+
 
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("TP Audio GUI — Motores: KS / Kick ADSR / Piano Sample + FX")
-        self.geometry("1120x780")
+        self.title("TP Audio GUI — KS / Kick ADSR / Piano Sample + FX + Volumen por pista")
+        self.geometry("1140x800")
 
         self.midi_path = tk.StringVar()
         self.out_path = tk.StringVar(value="out.wav")
 
-        # ===== Efectos (estado) =====
-        # Reverb
-        self.reverb_on   = tk.BooleanVar(value=True)
-        self.rv_room     = tk.DoubleVar(value=0.5)
-        self.rv_decay    = tk.DoubleVar(value=1.8)
+        # === Estado de efectos globales ===
+        self.reverb_on = tk.BooleanVar(value=True)
+        self.rv_room = tk.DoubleVar(value=0.5)
+        self.rv_decay = tk.DoubleVar(value=1.8)
         self.rv_predelay = tk.DoubleVar(value=20.0)
-        self.rv_bright   = tk.DoubleVar(value=0.6)
-        self.rv_mix      = tk.DoubleVar(value=0.25)
-        # Flanger
-        self.flanger_on  = tk.BooleanVar(value=False)
-        self.fl_rate     = tk.DoubleVar(value=0.25)
+        self.rv_bright = tk.DoubleVar(value=0.6)
+        self.rv_mix = tk.DoubleVar(value=0.25)
+
+        self.flanger_on = tk.BooleanVar(value=False)
+        self.fl_rate = tk.DoubleVar(value=0.25)
         self.fl_depth_ms = tk.DoubleVar(value=3.0)
-        self.fl_base_ms  = tk.DoubleVar(value=2.0)
+        self.fl_base_ms = tk.DoubleVar(value=2.0)
         self.fl_feedback = tk.DoubleVar(value=0.2)
-        self.fl_mix      = tk.DoubleVar(value=0.5)
+        self.fl_mix = tk.DoubleVar(value=0.5)
 
         self.tracks_cfg = []
         self.notes = []
@@ -191,17 +167,13 @@ class App(tk.Tk):
         self.presets = None
         self.available_presets = {}
         self._selected_track_idx = None
-
-        self._midi_paths_cache = {}  # {basename: fullpath}
-
-        # NUEVO: cache de notas para acelerar KS / sample / kick
-        self._note_cache = {}  # {(id(rf), pitch, dur_ms, vel_bin): np.ndarray}
-
-        # Último WAV realmente renderizado (para espectrograma)
-        self._last_rendered_wav: str | None = None
+        self._note_cache = {}
+        self._midi_paths_cache = {}
+        self._last_rendered_wav = None
 
         self._build_ui()
 
+    # === UI ===
     def _build_ui(self):
         container = ttk.Frame(self)
         container.pack(fill="both", expand=True, padx=10, pady=10)
@@ -211,12 +183,10 @@ class App(tk.Tk):
         frm_files.pack(fill="x", pady=6)
 
         ttk.Label(frm_files, text="Archivo MIDI:").grid(row=0, column=0, padx=6, sticky="e")
-        self.cmb_midi = ttk.Combobox(frm_files, state="readonly", width=64, values=[])
+        self.cmb_midi = ttk.Combobox(frm_files, state="readonly", width=64)
         self.cmb_midi.grid(row=0, column=1, padx=6, sticky="w")
         self.cmb_midi.bind("<Button-1>", self._refresh_midi_list)
-        self.cmb_midi.bind("<FocusIn>", self._refresh_midi_list)
         self.cmb_midi.bind("<<ComboboxSelected>>", self._on_midi_selected)
-
         ttk.Button(frm_files, text="Cargar", command=self._load_midi_from_combo).grid(row=0, column=2, padx=6)
         ttk.Button(frm_files, text="Buscar...", command=self._load_midi_from_explorer).grid(row=0, column=3, padx=6)
 
@@ -224,248 +194,167 @@ class App(tk.Tk):
         ttk.Entry(frm_files, textvariable=self.out_path, width=64).grid(row=1, column=1, padx=6, sticky="w")
         ttk.Button(frm_files, text="Elegir", command=self._browse_out).grid(row=1, column=2, padx=6)
 
-        # === Efectos (sliders) ===
-        frm_fx = ttk.LabelFrame(container, text="Efectos (sobre la mezcla de todas las pistas habilitadas)")
+        # === FX (solo switches acá para no recargar UI) ===
+        frm_fx = ttk.LabelFrame(container, text="Efectos globales (se aplican sobre la mezcla)")
         frm_fx.pack(fill="x", pady=8)
-
-        fx_left  = ttk.LabelFrame(frm_fx, text="🌊 Reverb")
-        fx_right = ttk.LabelFrame(frm_fx, text="🎸 Flanger")
-        fx_left.grid(row=0, column=0, padx=6, pady=6, sticky="nsew")
-        fx_right.grid(row=0, column=1, padx=6, pady=6, sticky="nsew")
-        frm_fx.columnconfigure(0, weight=1)
-        frm_fx.columnconfigure(1, weight=1)
-
-        ttk.Checkbutton(fx_left, text="Activar", variable=self.reverb_on).grid(row=0, column=0, sticky="w", padx=6, pady=(6,2))
-        self._add_labeled_scale(fx_left, "Tamaño de sala", 0.0, 1.0, self.rv_room,     0.01, 1)
-        self._add_labeled_scale(fx_left, "Duración T60 (s)", 0.3, 5.0, self.rv_decay,  0.1,  2)
-        self._add_labeled_scale(fx_left, "Pre-delay (ms)",   0.0, 80.0, self.rv_predelay, 1.0, 3)
-        self._add_labeled_scale(fx_left, "Brillo",           0.0, 1.0, self.rv_bright, 0.01, 4)
-        self._add_labeled_scale(fx_left, "Mix (dry/wet)",    0.0, 1.0, self.rv_mix,    0.01, 5)
-
-        ttk.Checkbutton(fx_right, text="Activar", variable=self.flanger_on).grid(row=0, column=0, sticky="w", padx=6, pady=(6,2))
-        self._add_labeled_scale(fx_right, "Velocidad LFO (Hz)", 0.05, 2.0, self.fl_rate,     0.01, 1)
-        self._add_labeled_scale(fx_right, "Profundidad (ms)",   0.0,  12.0, self.fl_depth_ms,0.1,  2)
-        self._add_labeled_scale(fx_right, "Retardo base (ms)",  0.5,  6.0,  self.fl_base_ms, 0.1,  3)
-        self._add_labeled_scale(fx_right, "Feedback",          -0.95, 0.95, self.fl_feedback,0.01, 4)
-        self._add_labeled_scale(fx_right, "Mix (dry/wet)",      0.0,  1.0,  self.fl_mix,     0.01, 5)
+        ttk.Checkbutton(frm_fx, text="Reverb", variable=self.reverb_on).grid(row=0, column=0, padx=6)
+        ttk.Checkbutton(frm_fx, text="Flanger", variable=self.flanger_on).grid(row=0, column=1, padx=6)
 
         # === Pistas ===
-        frm_tracks = ttk.LabelFrame(container, text="Pistas")
+        frm_tracks = ttk.LabelFrame(container, text="Pistas (con volumen por pista)")
         frm_tracks.pack(fill="both", expand=True, pady=6)
         self.tree = ttk.Treeview(
             frm_tracks,
-            columns=("enabled", "synth", "preset", "instrument", "emoji"),
-            show="headings",
-            height=16
+            columns=("enabled", "synth", "vol", "preset", "instrument", "emoji"),
+            show="headings", height=16
         )
-        for c, t, w in [
-            ("enabled", "Usar", 60),
-            ("synth", "Motor", 120),
-            ("preset", "Preset", 240),
-            ("instrument", "Instrumento", 300),
-            ("emoji", "🎵", 60),
+        for c, t, w, anchor in [
+            ("enabled", "Usar", 60, "center"),
+            ("synth", "Motor", 120, "center"),
+            ("vol", "Vol", 70, "center"),
+            ("preset", "Preset", 200, "center"),
+            ("instrument", "Instrumento", 300, "center"),
+            ("emoji", "🎵", 60, "center"),
         ]:
             self.tree.heading(c, text=t)
-            self.tree.column(c, width=w, anchor="center")
+            self.tree.column(c, width=w, anchor=anchor)
         self.tree.pack(fill="both", expand=True, padx=6, pady=6)
         self.tree.bind("<<TreeviewSelect>>", self._on_tree_select)
-        self.tree.bind("<Button-1>", self._on_tree_click_toggle_enabled)
 
+        # Edición
         frm_edit = ttk.Frame(frm_tracks)
         frm_edit.pack(fill="x", pady=6)
         ttk.Label(frm_edit, text="Motor:").grid(row=0, column=0, padx=6)
-        self.cmb_synth = ttk.Combobox(frm_edit, values=["kick_adsr", "ks", "piano_sample"], state="readonly", width=14)
+        self.cmb_synth = ttk.Combobox(frm_edit, values=["kick_adsr", "ks", "piano_sample"],
+                                      state="readonly", width=14)
         self.cmb_synth.grid(row=0, column=1, padx=6)
         self.cmb_synth.bind("<<ComboboxSelected>>", self._on_synth_change)
-
         ttk.Label(frm_edit, text="Preset:").grid(row=0, column=2)
         self.cmb_preset = ttk.Combobox(frm_edit, values=[], state="readonly", width=32)
         self.cmb_preset.grid(row=0, column=3, padx=6)
         ttk.Button(frm_edit, text="Aplicar pista", command=self._apply_to_selected).grid(row=0, column=4, padx=6)
 
+        # 🔊 Slider de volumen
+        ttk.Label(frm_edit, text="Volumen:").grid(row=1, column=0, padx=6, sticky="e")
+        self.edit_vol = tk.DoubleVar(value=1.0)
+        frm_vol = ttk.Frame(frm_edit)
+        frm_vol.grid(row=1, column=1, columnspan=3, sticky="ew", padx=6)
+        frm_vol.columnconfigure(0, weight=1)
+        self.sld_vol = ttk.Scale(frm_vol, from_=0.0, to=1.0, orient="horizontal",
+                                 variable=self.edit_vol,
+                                 command=lambda _: self._on_volume_change_live())
+        self.sld_vol.grid(row=0, column=0, sticky="ew")
+        self.lbl_vol_val = ttk.Label(frm_vol, text="1.00", width=6, anchor="e")
+        self.lbl_vol_val.grid(row=0, column=1, padx=(6, 0))
+
         # === Acciones ===
         bar = ttk.Frame(container)
         bar.pack(fill="x", pady=8)
-
         self.btn_spec = ttk.Button(bar, text="Ver espectrograma", command=self._show_last_spectrogram)
         self.btn_spec.pack(side="left", padx=6)
-        self.btn_spec.state(["disabled"])  # deshabilitado hasta el 1er render
-
+        self.btn_spec.state(["disabled"])
         ttk.Button(bar, text="Renderizar WAV", command=self._render).pack(side="right", padx=10)
         ttk.Button(bar, text="Salir", command=self.destroy).pack(side="right", padx=6)
 
-    # --- helper de slider con etiqueta y valor ---
-    def _add_labeled_scale(self, parent, label, minv, maxv, var, resolution=0.01, row=0):
-        frm = ttk.Frame(parent)
-        frm.grid(row=row, column=0, sticky="ew", padx=6, pady=2)
-        frm.columnconfigure(1, weight=1)
-        ttk.Label(frm, text=label).grid(row=0, column=0, sticky="w", padx=(0,8))
-        val_lbl = ttk.Label(frm, width=8, anchor="e")
-        val_lbl.grid(row=0, column=2, sticky="e")
-        def _upd(_=None):
-            val_lbl.config(text=f"{var.get():.2f}")
-        scale = ttk.Scale(frm, from_=minv, to=maxv, variable=var, command=_upd)
-        scale.grid(row=0, column=1, sticky="ew")
-        _upd()
-
-    # ---- Helpers GUI ----
-    def _refresh_midi_list(self, _evt=None):
+    # === Funciones auxiliares ===
+    def _refresh_midi_list(self, _=None):
         paths = list_mid_files_in_root(PROJECT_ROOT)
         self._midi_paths_cache = {p.name: str(p) for p in paths}
         names = list(self._midi_paths_cache.keys())
         self.cmb_midi["values"] = names
-        if names and not self.cmb_midi.get():
+        if names:
             self.cmb_midi.set(names[0])
             self.midi_path.set(self._midi_paths_cache[names[0]])
 
-    def _on_midi_selected(self, _evt=None):
+    def _on_midi_selected(self, _=None):
         name = self.cmb_midi.get()
         path = self._midi_paths_cache.get(name)
         if path:
             self.midi_path.set(path)
 
-    def _on_tree_click_toggle_enabled(self, event):
-        col = self.tree.identify_column(event.x)
-        row = self.tree.identify_row(event.y)
-        if col != '#1' or not row:
-            return
-        try:
-            ti = int(row)
-        except ValueError:
-            return
-        current = self.tree.set(row, "enabled")
-        new = "✖" if current == "✔" else "✔"
-        self.tree.set(row, "enabled", new)
-        cfg = self._cfg_by_idx(ti)
-        if cfg:
-            cfg.enabled.set(new == "✔")
-        return "break"
-
     def _browse_out(self):
-        p = filedialog.asksaveasfilename(defaultextension=".wav", filetypes=[("WAV", "*.wav")], initialdir=str(PROJECT_ROOT))
+        p = filedialog.asksaveasfilename(defaultextension=".wav",
+                                         filetypes=[("WAV", "*.wav")],
+                                         initialdir=str(PROJECT_ROOT))
         if p:
             self.out_path.set(p)
 
-    # ---- Presets ----
-    def _ensure_presets_loaded(self):
-        if not self.presets:
-            try:
-                self.presets = load_presets(str(DEFAULT_PRESET_INSTR), str(DEFAULT_PRESET_FX))
-            except Exception:
-                self.presets = {}
-        avail = {}
-        for bank, items in (self.presets or {}).items():
-            if isinstance(items, dict):
-                avail[bank] = sorted(list(items.keys()))
-        self.available_presets = avail
-
-    def _reload_preset_combo_for_bank(self, bank: str):
-        self._ensure_presets_loaded()
-        values = []
-        if bank == "kick_adsr":
-            values = [f"drums.{p}" for p in self.available_presets.get("drums", [])]
-        elif bank == "piano_sample":
-            values = []  # solo vacío
-        elif bank == "ks":
-            values = [f"ks.{p}" for p in self.available_presets.get("ks", [])]
-            if not values:
-                values = [f"ks.{p}" for p in ("nylon", "steel", "electric", "bass", "banjo")]
-        self.cmb_preset["values"] = [""] + values  # siempre incluir vacío
-
-    # ---- MIDI loading (combo / explorador) ----
     def _load_midi_from_combo(self):
         path = self.midi_path.get().strip()
         if not path:
-            name = self.cmb_midi.get().strip()
-            path = self._midi_paths_cache.get(name, "")
-        if not path:
-            messagebox.showwarning("MIDI", "Elegí un archivo del combo o usa 'Buscar...'.")
+            messagebox.showwarning("MIDI", "Elegí un archivo.")
             return
         self._load_midi_common(path)
 
     def _load_midi_from_explorer(self):
-        path = filedialog.askopenfilename(filetypes=[("MIDI", "*.mid *.midi")], initialdir=str(PROJECT_ROOT))
-        if not path:
-            return
-        self.midi_path.set(path)
-        p = Path(path)
-        if p.parent.resolve() == PROJECT_ROOT.resolve():
-            if p.name not in self._midi_paths_cache:
-                self._midi_paths_cache[p.name] = str(p)
-                self.cmb_midi["values"] = list(self._midi_paths_cache.keys())
-            self.cmb_midi.set(p.name)
-        else:
-            self.cmb_midi.set(p.name)
-        self._load_midi_common(path)
+        path = filedialog.askopenfilename(filetypes=[("MIDI", "*.mid *.midi")],
+                                          initialdir=str(PROJECT_ROOT))
+        if path:
+            self._load_midi_common(path)
 
     def _load_midi_common(self, path: str):
         notes = load_notes(path)
         if not notes:
-            messagebox.showwarning("MIDI", "No se encontraron notas en el MIDI.")
+            messagebox.showwarning("MIDI", "No se encontraron notas.")
             return
-        self.midi_path.set(path)
         self.notes = notes
-
-        # Agrupar por pista (O(1) en render)
         self.by_track.clear()
         for (ti, t0, dur, pitch, vel) in self.notes:
             self.by_track.setdefault(ti, []).append((ti, t0, dur, pitch, vel))
-
-        # Detectar instrumentos GM por pista
-        det_map = {}
-        if HAS_MIDO:
-            detected = detect_midi_instruments(path)
-            det_map = {ti: (name, emoji) for (ti, name, emoji) in detected}
-
-        # Poblar tabla
-        self.tracks_cfg.clear()
+        det_map = {ti: (name, emoji) for (ti, name, emoji) in detect_midi_instruments(path)}
         self.tree.delete(*self.tree.get_children())
+        self.tracks_cfg.clear()
         for ti in sorted(self.by_track.keys()):
             cfg = TrackConfig(ti)
             name, emoji = det_map.get(ti, ("Unknown / No Program Change", "🎵"))
             cfg.detected = name
             cfg.emoji = emoji
             cfg.synth.set(suggest_synth(name))
-            cfg.preset.set("")  # iniciar en blanco
             self.tracks_cfg.append(cfg)
             self.tree.insert("", "end", iid=str(ti),
-                             values=("✔", cfg.synth.get(), cfg.preset.get(), cfg.detected, cfg.emoji))
-
-        # Invalida cache por nuevo MIDI
+                             values=("✔", cfg.synth.get(), f"{cfg.volume.get():.2f}",
+                                     cfg.preset.get(), cfg.detected, cfg.emoji))
         self._note_cache.clear()
+        messagebox.showinfo("MIDI", f"Pistas: {len(self.tracks_cfg)}  |  Notas: {len(self.notes)}")
 
-        messagebox.showinfo("MIDI", f"Notas: {len(self.notes)} | Pistas: {len(self.tracks_cfg)}")
-
-    # ---- Edición ----
-    def _on_tree_select(self, _evt):
+    # === Edición ===
+    def _on_tree_select(self, _=None):
         sel = self.tree.selection()
         if not sel:
             return
-        self._selected_track_idx = int(sel[0])
-        cfg = self._cfg_by_idx(self._selected_track_idx)
+        ti = int(sel[0])
+        self._selected_track_idx = ti
+        cfg = self._cfg_by_idx(ti)
         self.cmb_synth.set(cfg.synth.get())
-        self._reload_preset_combo_for_bank(cfg.synth.get())
         self.cmb_preset.set(cfg.preset.get())
+        self.edit_vol.set(cfg.volume.get())
+        self.lbl_vol_val.config(text=f"{cfg.volume.get():.2f}")
 
-    def _cfg_by_idx(self, ti: int):
+    def _cfg_by_idx(self, ti):
         for c in self.tracks_cfg:
             if c.track_idx == ti:
                 return c
         return None
 
-    def _on_synth_change(self, _evt=None):
-        bank = self.cmb_synth.get()
-        self._reload_preset_combo_for_bank(bank)
-        self.cmb_preset.set("")  # limpiar visual
-        if self._selected_track_idx is not None:
-            cfg = self._cfg_by_idx(self._selected_track_idx)
-            if cfg:
-                cfg.synth.set(bank)
-                cfg.preset.set("")  # limpiar en modelo
-                self.tree.set(str(cfg.track_idx), "synth", bank)
-                self.tree.set(str(cfg.track_idx), "preset", "")
-        # Invalida cache porque cambia síntesis/preset
+    def _on_synth_change(self, _=None):
+        if self._selected_track_idx is None:
+            return
+        cfg = self._cfg_by_idx(self._selected_track_idx)
+        if cfg:
+            cfg.synth.set(self.cmb_synth.get())
+            cfg.preset.set("")
+            self.tree.set(str(cfg.track_idx), "synth", cfg.synth.get())
+            self.tree.set(str(cfg.track_idx), "preset", "")
         self._note_cache.clear()
+
+    def _on_volume_change_live(self):
+        """Actualizar volumen y reflejarlo en la tabla."""
+        self.lbl_vol_val.config(text=f"{self.edit_vol.get():.2f}")
+        if self._selected_track_idx is None:
+            return
+        cfg = self._cfg_by_idx(self._selected_track_idx)
+        cfg.volume.set(self.edit_vol.get())
+        self.tree.set(str(cfg.track_idx), "vol", f"{cfg.volume.get():.2f}")
 
     def _apply_to_selected(self):
         sel = self.tree.selection()
@@ -474,53 +363,74 @@ class App(tk.Tk):
         ti = int(sel[0])
         cfg = self._cfg_by_idx(ti)
         cfg.synth.set(self.cmb_synth.get())
-        cfg.preset.set(self.cmb_preset.get())  # puede ser ""
+        cfg.preset.set(self.cmb_preset.get())
+        cfg.volume.set(self.edit_vol.get())
         self.tree.set(str(ti), "synth", cfg.synth.get())
         self.tree.set(str(ti), "preset", cfg.preset.get())
-        # Invalida cache porque cambia síntesis/preset
+        self.tree.set(str(ti), "vol", f"{cfg.volume.get():.2f}")
         self._note_cache.clear()
 
-    # ---- Visualización: espectrograma del último WAV renderizado ----
+    # === Espectrograma ===
     def _show_spectrogram(self, wav_path: str):
-        """Carga el WAV final y muestra su espectrograma en una ventana de Matplotlib."""
         try:
             y, fs = sf.read(wav_path, dtype="float32")
         except Exception as e:
             messagebox.showerror("Error", f"No se pudo leer el WAV:\n{e}")
             return
-
-        plt.close('all')
+        plt.close("all")
         if y.ndim == 1:
             fig, ax = plt.subplots(figsize=(10, 5))
             sig = y + 1e-12
-            _, _, _, im = ax.specgram(
-                sig, NFFT=1024, Fs=fs, noverlap=512, cmap="inferno",
-                vmin=-120, vmax=-20
-            )
-            ax.set_title(f"Espectrograma: {Path(wav_path).name}")
+            _, _, _, im = ax.specgram(sig, NFFT=1024, Fs=fs, noverlap=512,
+                                      cmap="inferno", vmin=-120, vmax=-20)
+            ax.set_title(Path(wav_path).name)
             ax.set_xlabel("Tiempo [s]"); ax.set_ylabel("Frecuencia [Hz]")
-            cbar = fig.colorbar(im, ax=ax, pad=0.02); cbar.set_label("Amplitud [dB]")
+            fig.colorbar(im, ax=ax, pad=0.02).set_label("Amplitud [dB]")
         else:
             fig, (axL, axR) = plt.subplots(1, 2, figsize=(12, 5), sharey=True)
-            sigL = y[:, 0] + 1e-12
-            sigR = y[:, 1] + 1e-12
+            sigL = y[:, 0] + 1e-12; sigR = y[:, 1] + 1e-12
             _, _, _, imL = axL.specgram(sigL, NFFT=1024, Fs=fs, noverlap=512, cmap="inferno", vmin=-120, vmax=-20)
             _, _, _, imR = axR.specgram(sigR, NFFT=1024, Fs=fs, noverlap=512, cmap="inferno", vmin=-120, vmax=-20)
             axL.set_title("Left"); axR.set_title("Right")
             for ax in (axL, axR): ax.set_xlabel("Tiempo [s]")
             axL.set_ylabel("Frecuencia [Hz]")
-            cbar = fig.colorbar(imR, ax=[axL, axR], pad=0.02); cbar.set_label("Amplitud [dB]")
+            fig.colorbar(imR, ax=[axL, axR], pad=0.02).set_label("Amplitud [dB]")
         plt.tight_layout(); plt.show()
 
     def _show_last_spectrogram(self):
         if not self._last_rendered_wav:
-            messagebox.showwarning("Espectrograma", "Aún no generaste ningún WAV.")
-            return
-        p = Path(self._last_rendered_wav)
-        if not p.exists():
-            messagebox.showwarning("Espectrograma", f"No encuentro el archivo:\n{self._last_rendered_wav}\nVolvé a renderizar.")
+            messagebox.showwarning("Espectrograma", "No hay WAV generado aún.")
             return
         self._show_spectrogram(self._last_rendered_wav)
+
+    # ====== OPTIMIZACIONES: caché de notas + timeline rápido ======
+    def _cached_note(self, rf, pitch, dur, vel):
+        """Devuelve el audio de una nota cacheada por (id(rf), pitch, dur_ms, vel_bin)."""
+        dur_ms = int(round(dur * 1000))
+        vel_bin = int(vel) // 2
+        key = (id(rf), pitch, dur_ms, vel_bin)
+        seg = self._note_cache.get(key)
+        if seg is None:
+            seg = rf(pitch, dur, vel, SR)
+            if seg.dtype != np.float32:
+                seg = seg.astype(np.float32, copy=False)
+            self._note_cache[key] = seg
+        return seg
+
+    def _lay_notes_on_timeline_fast(self, notes, rf, sr=SR):
+        """Versión rápida: usa cache por nota y suma por slicing. 'notes' es una lista de UNA pista."""
+        if not notes:
+            return np.zeros(1, dtype=np.float32)
+        t_end = max(t0 + dur for (_ti, t0, dur, _p, _v) in notes)
+        n = int(np.ceil(t_end * sr)) + 1
+        y = np.zeros(n, dtype=np.float32)
+        for (_ti, t0, dur, pitch, vel) in notes:
+            seg = self._cached_note(rf, pitch, dur, vel)
+            i0 = int(round(t0 * sr))
+            i1 = min(i0 + len(seg), n)
+            if i0 < n:
+                y[i0:i1] += seg[:i1 - i0]
+        return y
 
     # ---- Renderers ----
     def _make_renderer(self, cfg: TrackConfig, samples):
@@ -540,8 +450,10 @@ class App(tk.Tk):
         if synth == "kick_adsr":
             bank, name = ("drums", "kick_additive")
             if preset:
-                if "." in preset: bank, name = preset.split(".", 1)
-                else: bank, name = "drums", preset
+                if "." in preset:
+                    bank, name = preset.split(".", 1)
+                else:
+                    bank, name = "drums", preset
             p = get_params(bank, name) or {
                 "dur_s": 0.35,
                 "f_start_hz": 150.0, "f_end_hz": 50.0, "tau_freq_ms": 22.0,
@@ -572,35 +484,6 @@ class App(tk.Tk):
 
         raise SystemExit(f"Motor no reconocido: {synth}")
 
-    # ====== OPTIMIZACIONES: caché de notas + timeline rápido ======
-    def _cached_note(self, rf, pitch, dur, vel):
-        """Devuelve el audio de una nota cacheada por (id(rf), pitch, dur_ms, vel_bin)."""
-        dur_ms = int(round(dur * 1000.0))
-        vel_bin = int(vel) // 2
-        key = (id(rf), pitch, dur_ms, vel_bin)
-        seg = self._note_cache.get(key)
-        if seg is None:
-            seg = rf(pitch, dur, vel, SR)
-            if seg.dtype != np.float32:
-                seg = seg.astype(np.float32, copy=False)
-            self._note_cache[key] = seg
-        return seg
-
-    def _lay_notes_on_timeline_fast(self, notes, rf, sr=SR):
-        """Versión rápida: usa cache por nota y suma por slicing. 'notes' es una lista de UNA pista."""
-        if not notes:
-            return np.zeros(1, dtype=np.float32)
-        t_end = max(t0 + dur for (_ti, t0, dur, _p, _v) in notes)
-        n = int(np.ceil(t_end * sr)) + 1
-        y = np.zeros(n, dtype=np.float32)
-        for (_ti, t0, dur, pitch, vel) in notes:
-            seg = self._cached_note(rf, pitch, dur, vel)
-            i0 = int(round(t0 * sr))
-            i1 = min(i0 + len(seg), n)
-            if i0 < n:
-                y[i0:i1] += seg[:i1 - i0]
-        return y
-
     # ---- Render principal (mezcla + FX) ----
     def _render(self):
         if not self.notes:
@@ -625,8 +508,10 @@ class App(tk.Tk):
             tnotes = self.by_track.get(cfg.track_idx, [])  # O(1)
             rf = self._make_renderer(cfg, samples)
             y = self._lay_notes_on_timeline_fast(tnotes, rf)
-            if y.dtype != np.float32:
-                y = y.astype(np.float32, copy=False)
+            # aplicar volumen por pista
+            vol = float(cfg.volume.get())
+            if vol != 1.0:
+                y = (y * vol).astype(np.float32, copy=False)
             tracks_audio.append(y)
 
         if not tracks_audio:
@@ -669,6 +554,7 @@ class App(tk.Tk):
         fx_active = self.flanger_on.get() or self.reverb_on.get()
         fx_text = "con FX" if fx_active else "sin FX"
         messagebox.showinfo("Render", f"Archivo generado {fx_text}:\n{out}")
+
 
 if __name__ == "__main__":
     App().mainloop()

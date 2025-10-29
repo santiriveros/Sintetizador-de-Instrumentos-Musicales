@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 import numpy as np
 
-# SciPy opcional para acelerar la convolución
+
 try:
     from scipy.signal import fftconvolve
     _HAS_SCIPY = True
@@ -26,32 +26,28 @@ def _one_pole_lpf(x: np.ndarray, alpha: float) -> np.ndarray:
 
 @dataclass
 class Reverb:
-    room_size: float = 0.5      # 0..1 (mapea a longitud de IR)
-    decay_s: float = 1.8        # T60 aproximado
+    room_size: float = 0.5      
+    decay_s: float = 1.8        
     pre_delay_ms: float = 20.0
-    brightness: float = 0.6     # 0..1 (pasa bajo más/menos agresivo)
-    mix: float = 0.25           # 0..1
+    brightness: float = 0.6     
+    mix: float = 0.25           
 
     def _build_ir(self, n: int, fs: int) -> np.ndarray:
         """Construye una IR exponencial (cola) con duración proporcional al room_size/decay_s."""
-        # larga máxima de IR: 0.06 s * room_size como en tu proto original
+
         delay_len = int(max(1, self.room_size * 0.06 * fs))
         # envolvente exponencial T60≈decay_s
         t = np.arange(delay_len, dtype=np.float32)
         if self.decay_s <= 0.05:
-            # IR muy corta si decay es mínimo (evita explosión de convolución)
             ir = np.zeros(1, dtype=np.float32)
             ir[0] = 1.0
             return ir
-        # -60 dB en decay_s -> exp(-6.9078 * t/(decay_s*fs))
         ir = np.exp((-6.9077554 * t) / (self.decay_s * fs)).astype(np.float32)
-        # normalizar para mantener energía razonable
         if ir.sum() > 0:
             ir = ir / (ir.sum() + 1e-12)
         return ir
 
     def process(self, x: np.ndarray, fs: int) -> np.ndarray:
-        """Procesa mono. Convolución por FFT si SciPy está disponible."""
         orig_dtype = x.dtype
         x = _ensure_f32(np.asarray(x))
         n = x.shape[0]
@@ -73,8 +69,6 @@ class Reverb:
             else:
                 wet = np.concatenate([np.zeros(pre, dtype=np.float32), wet])[:n]
 
-        # Brillo -> LPF de primer orden
-        # fc = 1k + 9k*brightness  -> alpha ~ (2πfc)/(2πfc + fs)
         fc = 1000.0 + 9000.0 * float(np.clip(self.brightness, 0.0, 1.0))
         alpha = np.float32((2.0 * np.pi * fc) / (2.0 * np.pi * fc + fs))
         wet = _one_pole_lpf(wet, alpha)
